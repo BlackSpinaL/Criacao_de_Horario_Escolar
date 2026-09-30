@@ -1,6 +1,7 @@
 import streamlit as st
 from sqlalchemy import text
 from core.db import get_engine
+from core.seed_2026 import rodar_seed, status_banco
 
 st.set_page_config(
     page_title="Grade Escolar",
@@ -10,29 +11,49 @@ st.set_page_config(
 
 st.title("🏫 Sistema de Grade Horária")
 
-# ---------- Testa conexão com o banco ----------
-st.subheader("🔌 Status do banco de dados")
-
+# ---------- Testa conexão ----------
 try:
     engine = get_engine()
     with engine.connect() as conn:
-        resultado = conn.execute(
-            text("SELECT COUNT(*) FROM anos_letivos")
-        ).scalar()
-
-    st.success(f"✅ Conectado ao banco com sucesso! ({resultado} anos letivos cadastrados)")
-
+        conn.execute(text("SELECT 1"))
 except Exception as e:
     st.error(f"❌ Erro ao conectar no banco: {e}")
-    st.info("Verifique se o Secrets do Streamlit Cloud está correto (Etapa 2.5).")
     st.stop()
 
-# ---------- Próximas etapas ----------
-st.markdown("""
-### Próximas etapas
-- ✅ Etapa 1: deploy no Streamlit Cloud
-- ✅ Etapa 2: banco de dados na nuvem (Supabase)
-- ⏳ Etapa 3: cadastros (professores, turmas, componentes)
-- ⏳ Etapa 4: solver de geração de grade
-- ⏳ Etapa 5: visualização e exportação
-""")
+# ---------- Estatísticas ----------
+stats = status_banco()
+
+st.subheader("📊 Dados cadastrados")
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Anos letivos", stats["anos"])
+    st.metric("Componentes", stats["componentes"])
+    st.metric("Turmas", stats["turmas"])
+with col2:
+    st.metric("Grades de horário", stats["grades"])
+    st.metric("Slots de horário", stats["slots"])
+    st.metric("Matrizes", stats["matrizes"])
+with col3:
+    st.metric("Itens de matriz", stats["itens"])
+
+st.divider()
+
+# ---------- Seed 2026 ----------
+st.subheader("🌱 Carga inicial 2026")
+
+if stats["anos"] == 0:
+    st.info(
+        "Banco vazio. Clique no botão abaixo para cadastrar os dados "
+        "oficiais do CTPM/Lavras 2026 (ano letivo, componentes, matrizes, "
+        "grades de horário e turmas)."
+    )
+    if st.button("🚀 Rodar seed 2026", type="primary"):
+        with st.spinner("Inserindo dados no banco..."):
+            msg = rodar_seed()
+        st.success(msg)
+        st.balloons()
+        st.rerun()
+else:
+    st.success("✅ Os dados de 2026 já estão carregados no banco.")
+    st.balloons()
