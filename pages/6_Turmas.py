@@ -8,7 +8,6 @@ st.title("🏫 Turmas")
 
 engine = get_engine()
 
-# ---------- Ano letivo ----------
 with engine.connect() as conn:
     ano_row = conn.execute(
         text("SELECT id, ano FROM anos_letivos WHERE ativo = TRUE LIMIT 1")
@@ -27,7 +26,6 @@ with engine.connect() as conn:
         "WHERE ano_letivo_id = :a ORDER BY titulo"
     ), conn, params={"a": ano_id})
 
-# ---------- Mensagens ----------
 if "msg_turma" in st.session_state:
     tipo, texto = st.session_state.pop("msg_turma")
     getattr(st, tipo)(texto)
@@ -59,13 +57,10 @@ with st.form("nova_turma", clear_on_submit=True):
                          segmento, grade_horaria_id, alunos)
                         VALUES (:a, :c, :n, :s, :t, :sg, :g, :al)
                     """), {
-                        "a": ano_id,
-                        "c": codigo.strip(),
+                        "a": ano_id, "c": codigo.strip(),
                         "n": f"{serie.strip()} ({codigo.strip()})",
-                        "s": serie.strip(),
-                        "t": grade_row["turno"],
-                        "sg": grade_row["chave"],
-                        "g": int(grade_id),
+                        "s": serie.strip(), "t": grade_row["turno"],
+                        "sg": grade_row["chave"], "g": int(grade_id),
                         "al": alunos,
                     })
                 st.session_state["msg_turma"] = (
@@ -85,65 +80,152 @@ with st.form("nova_turma", clear_on_submit=True):
 # =====================================================================
 with engine.connect() as conn:
     df = pd.read_sql(text("""
-        SELECT t.id, t.codigo, t.serie, t.turno, t.segmento, t.alunos,
-               g.titulo AS grade
+        SELECT t.id, t.codigo, t.serie, t.turno, t.segmento,
+               t.alunos,
+               g.titulo AS grade,
+               COALESCE(
+                   (SELECT SUM(a.aulas_semana) FROM atividades a
+                    WHERE a.turma_id = t.id AND a.ano_letivo_id = :ano),
+                   0
+               ) AS aulas_sem
         FROM turmas t
         LEFT JOIN grades_horarias g ON g.id = t.grade_horaria_id
-        WHERE t.ano_letivo_id = :a
+        WHERE t.ano_letivo_id = :ano
         ORDER BY t.codigo
-    """), conn, params={"a": ano_id})
+    """), conn, params={"ano": ano_id})
+
+df["aulas_ano"] = df["aulas_sem"] * 40
 
 st.subheader(f"Cadastradas ({len(df)})")
 
 if df.empty:
-    st.info("Nenhuma turma cadastrada ainda. Use o formulário acima.")
+    st.info("Nenhuma turma cadastrada ainda.")
     st.stop()
 
-df_edit = df.copy()
-df_edit.insert(0, "sel", False)
+# =====================================================================
+# 🔎 FILTROS
+# =====================================================================
+col_f1, col_f2 = st.columns([2, 2])
+with col_f1:
+    busca = st.text_input("🔍 Buscar por código ou série",
+                          placeholder="Ex: 11801 ou 8º")
+with col_f2:
+    segmentos_disp = ["(todos)"] + sorted(df["segmento"].dropna().unique().tolist())
+    filtro_seg = st.selectbox("Filtrar por segmento", segmentos_disp)
+
+df_filt = df.copy()
+if busca:
+    df_filt = df_filt[
+        df_filt["codigo"].str.contains(busca, case=False, na=False) |
+        df_filt["serie"].str.contains(busca, case=False, na=False)
+    ]
+if filtro_seg != "(todos)":
+    df_filt = df_filt[df_filt["segmento"] == filtro_seg]
+
+# =====================================================================
+# 📊 TABELA
+# =====================================================================
+df_view = df_filt[[
+    "id", "codigo", "serie", "turno", "alunos",
+    "aulas_sem", "aulas_ano"
+]].rename(columns={
+    "id": "ID", "codigo": "Código", "serie": "Série",
+    "turno": "Turno", "alunos": "Alunos",
+    "aulas_sem": "Aulas/sem", "aulas_ano": "Aulas/ano",
+})
+df_view.insert(0, "🗑️", False)
 
 editado = st.data_editor(
-    df_edit,
+    df_view,
     column_config={
-        "sel": st.column_config.CheckboxColumn(
-            "🗑️", default=False, width="small"
-        ),
-        "id": st.column_config.NumberColumn(
-            "ID", disabled=True, width="small"
-        ),
-        "codigo": st.column_config.TextColumn(
-            "Código", disabled=True, width="small"
-        ),
-        "serie": st.column_config.TextColumn(
-            "Série", disabled=True, width="medium"
-        ),
-        "turno": st.column_config.TextColumn(
-            "Turno", disabled=True, width="small"
-        ),
-        "segmento": st.column_config.TextColumn(
-            "Segmento", disabled=True, width="small"
-        ),
-        "grade": st.column_config.TextColumn(
-            "Grade", disabled=True, width="medium"
-        ),
-        "alunos": st.column_config.NumberColumn(
-            "Alunos", disabled=True, width="small"
-        ),
+        "🗑️": st.column_config.CheckboxColumn("🗑️", default=False, width="small"),
+        "ID": st.column_config.NumberColumn("ID", disabled=True, width="small"),
+        "Código": st.column_config.TextColumn("Código", disabled=True, width="small"),
+        "Série": st.column_config.TextColumn("Série", disabled=True, width="medium"),
+        "Turno": st.column_config.TextColumn("Turno", disabled=True, width="small"),
+        "Alunos": st.column_config.NumberColumn("Alunos", disabled=True, width="small"),
+        "Aulas/sem": st.column_config.NumberColumn("Aulas/sem", disabled=True, width="small"),
+        "Aulas/ano": st.column_config.NumberColumn("Aulas/ano", disabled=True, width="small"),
     },
     hide_index=True,
     use_container_width=True,
     key="editor_turmas",
 )
 
-# ---------- Barra de ações ----------
-marcados = editado[editado["sel"]]
+st.caption(
+    f"📊 **Exibindo {len(df_filt)} de {len(df)} turmas** · "
+    f"{int(df_filt['aulas_sem'].sum())} aulas/semana · "
+    f"{int(df_filt['aulas_ano'].sum())} aulas/ano"
+)
+
+# =====================================================================
+# 📥 EXPORTAR CSV
+# =====================================================================
+csv = df_filt[[
+    "codigo", "serie", "turno", "alunos", "aulas_sem", "aulas_ano"
+]].rename(columns={
+    "codigo": "Código", "serie": "Série", "turno": "Turno",
+    "alunos": "Alunos", "aulas_sem": "Aulas semanais",
+    "aulas_ano": "Aulas anuais",
+}).to_csv(index=False).encode("utf-8")
+
+st.download_button(
+    "⬇️ Exportar CSV", csv, "turmas.csv", "text/csv",
+)
+
+# =====================================================================
+# 👁️ DETALHES DA TURMA
+# =====================================================================
+st.divider()
+st.subheader("👁️ Detalhes da Turma")
+
+turma_sel = st.selectbox(
+    "Escolha uma turma",
+    df["id"].tolist(),
+    format_func=lambda x: df.loc[df["id"] == x, "codigo"].iloc[0]
+    + " — " + df.loc[df["id"] == x, "serie"].iloc[0],
+    key="detalhe_turma",
+)
+
+turma_dados = df.loc[df["id"] == turma_sel].iloc[0]
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Alunos", int(turma_dados["alunos"]))
+c2.metric("Turno", turma_dados["turno"])
+c3.metric("Aulas/sem", int(turma_dados["aulas_sem"]))
+c4.metric("Aulas/ano", int(turma_dados["aulas_ano"]))
+
+with engine.connect() as conn:
+    detalhes = pd.read_sql(text("""
+        SELECT
+            c.nome AS "Disciplina",
+            p.nome AS "Professor",
+            a.aulas_semana AS "Aulas/sem",
+            a.aulas_semana * 40 AS "Aulas/ano"
+        FROM atividades a
+        JOIN componentes c ON c.id = a.componente_id
+        JOIN professores p ON p.id = a.professor_id
+        WHERE a.turma_id = :t AND a.ano_letivo_id = :ano
+        ORDER BY c.nome
+    """), conn, params={"t": int(turma_sel), "ano": ano_id})
+
+if detalhes.empty:
+    st.info(f"ℹ️ A turma ainda não tem aulas atribuídas.")
+else:
+    st.markdown(f"**Aulas atribuídas à turma:**")
+    st.dataframe(detalhes, use_container_width=True, hide_index=True)
+
+# =====================================================================
+# 🗑️ BARRA DE AÇÕES
+# =====================================================================
+marcados = editado[editado["🗑️"]]
 n_marc = len(marcados)
 col1, col2, _ = st.columns([2, 1, 4])
 
 if n_marc == 0:
     col1.caption("☝️ Marque turmas na coluna 🗑️ para deletar")
 else:
-    ids = marcados["id"].astype(int).tolist()
+    ids = marcados["ID"].astype(int).tolist()
     placeholders = ",".join(str(i) for i in ids)
 
     with engine.connect() as conn:
@@ -159,15 +241,13 @@ else:
     if not conflitos.empty:
         col1.warning(f"⚠️ {n_marc} turma(s) com aulas atribuídas")
         st.warning(
-            "**Atenção:** turmas com atividades vinculadas:\n\n" +
+            "**Atenção:** turmas com atividades:\n\n" +
             "\n".join([
                 f"- **{r.nome}** — {r.n_atv} atividade(s)"
                 for r in conflitos.itertuples()
             ])
         )
-        confirmar = st.checkbox(
-            "☑️ Confirmo deletar turma(s) **e** suas atividades"
-        )
+        confirmar = st.checkbox("☑️ Confirmo deletar **e** as atividades")
         if col2.button(
             f"🗑️ Deletar ({n_marc})", type="primary", disabled=not confirmar
         ):
