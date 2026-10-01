@@ -5,29 +5,23 @@ from core.db import get_engine
 
 st.set_page_config(page_title="Componentes", page_icon="📚", layout="wide")
 st.title("📚 Componentes Curriculares")
-st.caption(
-    "Disciplinas do colégio. Marque a **mãe** quando for uma disciplina filha "
-    "(ex: Ciências/Lab → mãe é Ciências)."
-)
+st.caption("Disciplinas do colégio. Marque a **mãe** quando for uma disciplina filha.")
 
 engine = get_engine()
 
-# ---------- Mensagens ----------
 if "msg_comp" in st.session_state:
     tipo, texto = st.session_state.pop("msg_comp")
     getattr(st, tipo)(texto)
 
-# ---------- Lista para escolher a mãe ----------
+# =====================================================================
+# ➕ CADASTRO
+# =====================================================================
 with engine.connect() as conn:
     existentes = pd.read_sql(
         text("SELECT nome FROM componentes ORDER BY nome"), conn
     )
-
 opcoes_mae = ["(nenhuma)"] + existentes["nome"].tolist()
 
-# =====================================================================
-# ➕ CADASTRO
-# =====================================================================
 with st.form("novo_comp", clear_on_submit=True):
     c1, c2 = st.columns([3, 2])
     nome = c1.text_input("Nome do componente")
@@ -36,7 +30,6 @@ with st.form("novo_comp", clear_on_submit=True):
         ["Linguagens", "Matemática", "Ciências", "Humanas",
          "Ensino Religioso", "Outros"],
     )
-
     c3, c4 = st.columns([2, 2])
     pratica_lab = c3.checkbox("Tem aula prática no laboratório?")
     mae = c4.selectbox(
@@ -56,9 +49,7 @@ with st.form("novo_comp", clear_on_submit=True):
                         (nome, area, pratica_lab, agrupa_com)
                         VALUES (:n, :a, :p, :m)
                     """), {
-                        "n": nome.strip(),
-                        "a": area,
-                        "p": pratica_lab,
+                        "n": nome.strip(), "a": area, "p": pratica_lab,
                         "m": None if mae == "(nenhuma)" else mae,
                     })
                 st.session_state["msg_comp"] = (
@@ -78,9 +69,20 @@ with st.form("novo_comp", clear_on_submit=True):
 # =====================================================================
 with engine.connect() as conn:
     df = pd.read_sql(text("""
-        SELECT id, nome, area, pratica_lab, agrupa_com
-        FROM componentes
-        ORDER BY area, nome
+        SELECT
+            c.id, c.nome, c.area, c.pratica_lab, c.agrupa_com,
+            COALESCE(
+                (SELECT COUNT(*) FROM itens_matriz im
+                 WHERE im.componente_id = c.id),
+                0
+            ) AS em_matrizes,
+            COALESCE(
+                (SELECT COUNT(*) FROM atividades a
+                 WHERE a.componente_id = c.id),
+                0
+            ) AS em_atividades
+        FROM componentes c
+        ORDER BY c.area, c.nome
     """), conn)
 
 st.subheader(f"Cadastrados ({len(df)})")
@@ -89,50 +91,127 @@ if df.empty:
     st.info("Nenhum componente cadastrado ainda.")
     st.stop()
 
-# ---------- Filtro por área ----------
-areas = ["Todas"] + sorted(df["area"].dropna().unique().tolist())
-filtro_area = st.selectbox("Filtrar por área", areas)
-df_view = df if filtro_area == "Todas" else df[df["area"] == filtro_area]
+# =====================================================================
+# 🔎 FILTROS
+# =====================================================================
+col_f1, col_f2, col_f3 = st.columns([2, 2, 2])
+with col_f1:
+    busca = st.text_input("🔍 Buscar por nome", placeholder="Ex: Matemática")
+with col_f2:
+    areas = ["(todas)"] + sorted(df["area"].dropna().unique().tolist())
+    filtro_area = st.selectbox("Filtrar por área", areas)
+with col_f3:
+    filtro_lab = st.selectbox(
+        "Prática de lab?",
+        ["(todos)", "Só com lab", "Só sem lab"],
+    )
 
-df_edit = df_view.copy()
-df_edit.insert(0, "sel", False)
+df_filt = df.copy()
+if busca:
+    df_filt = df_filt[df_filt["nome"].str.contains(busca, case=False, na=False)]
+if filtro_area != "(todas)":
+    df_filt = df_filt[df_filt["area"] == filtro_area]
+if filtro_lab == "Só com lab":
+    df_filt = df_filt[df_filt["pratica_lab"] == True]
+elif filtro_lab == "Só sem lab":
+    df_filt = df_filt[df_filt["pratica_lab"] == False]
+
+# =====================================================================
+# 📊 TABELA
+# =====================================================================
+df_view = df_filt[[
+    "id", "nome", "area", "pratica_lab", "agrupa_com",
+    "em_matrizes", "em_atividades"
+]].rename(columns={
+    "id": "ID", "nome": "Componente", "area": "Área",
+    "pratica_lab": "Lab?", "agrupa_com": "Filha de",
+    "em_matrizes": "Matrizes", "em_atividades": "Aulas",
+})
+df_view.insert(0, "🗑️", False)
 
 editado = st.data_editor(
-    df_edit,
+    df_view,
     column_config={
-        "sel": st.column_config.CheckboxColumn(
-            "🗑️", default=False, width="small"
-        ),
-        "id": st.column_config.NumberColumn(
-            "ID", disabled=True, width="small"
-        ),
-        "nome": st.column_config.TextColumn(
-            "Componente", disabled=True, width="large"
-        ),
-        "area": st.column_config.TextColumn(
-            "Área", disabled=True, width="medium"
-        ),
-        "pratica_lab": st.column_config.CheckboxColumn(
-            "Lab?", disabled=True, width="small"
-        ),
-        "agrupa_com": st.column_config.TextColumn(
-            "Filha de", disabled=True, width="medium"
-        ),
+        "🗑️": st.column_config.CheckboxColumn("🗑️", default=False, width="small"),
+        "ID": st.column_config.NumberColumn("ID", disabled=True, width="small"),
+        "Componente": st.column_config.TextColumn("Componente", disabled=True, width="large"),
+        "Área": st.column_config.TextColumn("Área", disabled=True, width="medium"),
+        "Lab?": st.column_config.CheckboxColumn("Lab?", disabled=True, width="small"),
+        "Filha de": st.column_config.TextColumn("Filha de", disabled=True, width="medium"),
+        "Matrizes": st.column_config.NumberColumn("Matrizes", disabled=True, width="small"),
+        "Aulas": st.column_config.NumberColumn("Aulas", disabled=True, width="small"),
     },
     hide_index=True,
     use_container_width=True,
     key="editor_comp",
 )
 
-# ---------- Barra de ações ----------
-marcados = editado[editado["sel"]]
+st.caption(f"📊 **Exibindo {len(df_filt)} de {len(df)} componentes**")
+
+# =====================================================================
+# 📥 EXPORTAR CSV
+# =====================================================================
+csv = df_filt[[
+    "nome", "area", "pratica_lab", "agrupa_com"
+]].rename(columns={
+    "nome": "Componente", "area": "Área",
+    "pratica_lab": "Prática no lab?", "agrupa_com": "Filha de",
+}).to_csv(index=False).encode("utf-8")
+
+st.download_button(
+    "⬇️ Exportar CSV", csv, "componentes.csv", "text/csv",
+)
+
+# =====================================================================
+# 👁️ DETALHES DO COMPONENTE
+# =====================================================================
+st.divider()
+st.subheader("👁️ Detalhes do Componente")
+
+comp_sel = st.selectbox(
+    "Escolha um componente",
+    df["id"].tolist(),
+    format_func=lambda x: df.loc[df["id"] == x, "nome"].iloc[0],
+    key="detalhe_comp",
+)
+
+comp_dados = df.loc[df["id"] == comp_sel].iloc[0]
+
+c1, c2, c3 = st.columns(3)
+c1.metric("Área", comp_dados["area"] or "—")
+c2.metric("Em matrizes", int(comp_dados["em_matrizes"]))
+c3.metric("Aulas atribuídas", int(comp_dados["em_atividades"]))
+
+# Onde este componente aparece (matrizes)
+with engine.connect() as conn:
+    por_serie = pd.read_sql(text("""
+        SELECT
+            m.serie AS "Série",
+            im.aulas_semana AS "Aulas/sem",
+            im.aulas_semana * 40 AS "Aulas/ano"
+        FROM itens_matriz im
+        JOIN matrizes m ON m.id = im.matriz_id
+        WHERE im.componente_id = :c
+        ORDER BY m.serie
+    """), conn, params={"c": int(comp_sel)})
+
+if por_serie.empty:
+    st.info("ℹ️ Este componente não está em nenhuma matriz.")
+else:
+    st.markdown("**Onde aparece (nas matrizes):**")
+    st.dataframe(por_serie, use_container_width=True, hide_index=True)
+
+# =====================================================================
+# 🗑️ BARRA DE AÇÕES
+# =====================================================================
+marcados = editado[editado["🗑️"]]
 n_marc = len(marcados)
 col1, col2, _ = st.columns([2, 1, 4])
 
 if n_marc == 0:
     col1.caption("☝️ Marque componentes na coluna 🗑️ para deletar")
 else:
-    ids = marcados["id"].astype(int).tolist()
+    ids = marcados["ID"].astype(int).tolist()
     placeholders = ",".join(str(i) for i in ids)
 
     with engine.connect() as conn:
@@ -148,7 +227,7 @@ else:
         ]
 
     if not conflitos.empty:
-        col1.warning(f"⚠️ {n_marc} componente(s) com uso")
+        col1.warning(f"⚠️ {n_marc} componente(s) em uso")
         st.warning(
             "**Atenção:** componentes em uso:\n\n" +
             "\n".join([
@@ -157,7 +236,7 @@ else:
             ])
         )
         confirmar = st.checkbox(
-            "☑️ Confirmo deletar componentes, itens de matriz e atividades vinculadas"
+            "☑️ Confirmo deletar componentes, itens de matriz e atividades"
         )
         if col2.button(
             f"🗑️ Deletar ({n_marc})", type="primary", disabled=not confirmar
