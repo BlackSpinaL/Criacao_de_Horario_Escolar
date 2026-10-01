@@ -39,21 +39,24 @@ with col3:
 
 st.divider()
 
-# ---------- Seed 2026 ----------
+# ---------- Carga inicial 2026 ----------
 st.subheader("🌱 Carga inicial 2026")
 
 if stats["anos"] == 0:
     st.info(
-        "Banco vazio. Clique no botão abaixo para cadastrar os dados "
-        "oficiais do CTPM/Lavras 2026 (ano letivo, componentes, matrizes, "
-        "grades de horário e turmas)."
+        "Banco vazio. Clique no botão abaixo para **carregar os dados "
+        "oficiais do CTPM/Lavras 2026**. Depois você pode **editar tudo "
+        "livremente** pelas páginas de cada cadastro (componentes, matrizes, "
+        "turmas, etc.)."
     )
-    if st.button("🚀 Rodar seed 2026", type="primary"):
+    if st.button("🚀 Carregar dados oficiais de 2026", type="primary"):
         with st.spinner("Inserindo dados no banco..."):
             msg = rodar_seed()
         st.success(msg)
         st.balloons()
         st.rerun()
 else:
-    st.success("✅ Os dados de 2026 já estão carregados no banco.")
-    st.balloons()
+    st.success(
+        "✅ Os dados de 2026 já estão carregados no banco. "
+        "Você pode editá-los livremente pelas páginas de cada cadastro."
+    )
