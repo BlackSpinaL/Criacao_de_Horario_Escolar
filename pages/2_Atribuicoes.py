@@ -87,12 +87,12 @@ def calcular_situacao(row):
     else:
         return f"🟡 Excedem {atrib - matriz}"
 
-comparativo["situação"] = comparativo.apply(calcular_situacao, axis=1)
+comparativo["situacao"] = comparativo.apply(calcular_situacao, axis=1)
 comparativo["atribuida_anual"] = comparativo["atribuida_semana"] * 40
 
-# ---------- Exibe com cores ----------
+# ---------- Cor por linha ----------
 def colorir(row):
-    s = row["situação"]
+    s = row["Situação"]
     if s.startswith("✅"):
         return ["background-color: #d4edda"] * len(row)
     elif s.startswith("⚠️") or s.startswith("❌"):
@@ -101,25 +101,25 @@ def colorir(row):
         return ["background-color: #fff3cd"] * len(row)
     return [""] * len(row)
 
-colunas_exibir = [
+# ---------- Renomeia colunas para exibição ----------
+df_exibir = comparativo[[
     "componente", "matriz_semana", "matriz_anual",
     "atribuida_semana", "atribuida_anual",
-    "professores", "situação"
-]
-df_exibir = comparativo[colunas_exibir].rename(columns={
+    "professores", "situacao"
+]].rename(columns={
     "componente": "Componente",
     "matriz_semana": "Matriz (aulas/sem)",
     "matriz_anual": "Matriz (aulas/ano)",
     "atribuida_semana": "Atribuído (aulas/sem)",
     "atribuida_anual": "Atribuído (aulas/ano)",
     "professores": "Professor(es)",
-    "situação": "Situação",
+    "situacao": "Situação",
 })
 
 styled = df_exibir.style.apply(colorir, axis=1)
 st.dataframe(styled, use_container_width=True, hide_index=True)
 
-# ---------- Estatísticas rápidas ----------
+# ---------- Estatísticas ----------
 total_matriz = int(comparativo["matriz_semana"].sum())
 total_atrib = int(comparativo["atribuida_semana"].sum())
 c1, c2, c3 = st.columns(3)
@@ -136,7 +136,7 @@ c3.metric(
 st.divider()
 
 # =====================================================================
-# ✏️ EDITOR INLINE — ajustar aulas semanais
+# ✏️ EDITOR INLINE
 # =====================================================================
 st.subheader("✏️ Ajustar aulas atribuídas")
 
@@ -172,7 +172,6 @@ with st.expander("Clique para editar", expanded=False):
                     comp_id = int(comparativo.iloc[idx]["componente_id"])
                     nova_qtd = int(row["Aulas/sem"])
 
-                    # Existe atribuição desse componente nessa turma?
                     existente = conn.execute(text(
                         "SELECT id FROM atividades "
                         "WHERE turma_id = :t AND componente_id = :c"
@@ -187,12 +186,6 @@ with st.expander("Clique para editar", expanded=False):
                             "UPDATE atividades SET aulas_semana = :n "
                             "WHERE id = :id"
                         ), {"n": nova_qtd, "id": existente.id})
-                    elif nova_qtd > 0 and not existente:
-                        st.warning(
-                            f"⚠️ Sem professor atribuído a "
-                            f"{comparativo.iloc[idx]['componente']} — use o "
-                            f"formulário abaixo."
-                        )
 
             st.success("Alterações salvas!")
             st.rerun()
@@ -202,7 +195,7 @@ with st.expander("Clique para editar", expanded=False):
 st.divider()
 
 # =====================================================================
-# ➕ CADASTRO — Professor × Componente × Turma
+# ➕ CADASTRO
 # =====================================================================
 st.subheader("➕ Nova atribuição")
 
@@ -219,52 +212,45 @@ if profs.empty:
 
 if comps_opcoes.empty:
     st.success(f"✅ A matriz de {turma_row['nome']} já está totalmente atribuída!")
-    st.stop()
+else:
+    with st.form("nova_atv", clear_on_submit=True):
+        c1, c2, c3 = st.columns([2, 3, 1])
+        prof_nome = c1.selectbox("Professor", profs["nome"])
+        comp_nome = c2.selectbox("Componente pendente", comps_opcoes["componente"])
+        aulas = c3.number_input("Aulas/sem", 1, 20, 1)
 
-with st.form("nova_atv", clear_on_submit=True):
-    c1, c2, c3 = st.columns([2, 3, 1])
-    prof_nome = c1.selectbox("Professor", profs["nome"])
-    comp_nome = c2.selectbox("Componente pendente", comps_opcoes["componente"])
-    aulas = c3.number_input("Aulas/sem", 1, 20, 1)
+        submit = st.form_submit_button("➕ Adicionar", type="primary")
 
-    submit = st.form_submit_button("➕ Adicionar", type="primary")
+    if submit:
+        prof_id = int(profs.loc[profs["nome"] == prof_nome, "id"].iloc[0])
+        comp_id = int(comps_opcoes.loc[
+            comps_opcoes["componente"] == comp_nome, "componente_id"
+        ].iloc[0])
 
-if submit:
-    prof_id = int(profs.loc[profs["nome"] == prof_nome, "id"].iloc[0])
-    comp_id = int(comps_opcoes.loc[
-        comps_opcoes["componente"] == comp_nome, "componente_id"
-    ].iloc[0])
+        matriz_qtd = int(comparativo.loc[
+            comparativo["componente"] == comp_nome, "matriz_semana"
+        ].iloc[0])
 
-    matriz_qtd = int(comparativo.loc[
-        comparativo["componente"] == comp_nome, "matriz_semana"
-    ].iloc[0])
-
-    if aulas > matriz_qtd:
-        st.session_state["msg_atv"] = (
-            "warning",
-            f"⚠️ A matriz pede apenas {matriz_qtd} aulas/semana de "
-            f"{comp_nome}. Você cadastrou {aulas}. Corrija para não exceder."
-        )
-    else:
-        try:
-            with engine.begin() as conn:
-                conn.execute(text(
-                    "INSERT INTO atividades (ano_letivo_id, professor_id, "
-                    "componente_id, turma_id, aulas_semana) "
-                    "VALUES (:a, :p, :c, :t, :n)"
-                ), {"a": ano_id, "p": prof_id, "c": comp_id,
-                    "t": int(turma_sel), "n": aulas})
-            st.session_state["msg_atv"] = (
-                "success",
-                f"✅ {prof_nome} → {comp_nome} → {turma_row['nome']} ({aulas} aulas/sem)"
+        if aulas > matriz_qtd:
+            st.warning(
+                f"⚠️ A matriz pede apenas {matriz_qtd} aulas/semana de "
+                f"{comp_nome}. Você cadastrou {aulas}."
             )
-        except Exception as e:
-            st.session_state["msg_atv"] = ("error", f"Erro: {e}")
-    st.rerun()
-
-if "msg_atv" in st.session_state:
-    tipo, texto = st.session_state.pop("msg_atv")
-    getattr(st, tipo)(texto)
+        else:
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(
+                        "INSERT INTO atividades (ano_letivo_id, professor_id, "
+                        "componente_id, turma_id, aulas_semana) "
+                        "VALUES (:a, :p, :c, :t, :n)"
+                    ), {"a": ano_id, "p": prof_id, "c": comp_id,
+                        "t": int(turma_sel), "n": aulas})
+                st.success(
+                    f"✅ {prof_nome} → {comp_nome} → {turma_row['nome']}"
+                )
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro: {e}")
 
 # ---------- Lista de atribuições atuais ----------
 with engine.connect() as conn:
