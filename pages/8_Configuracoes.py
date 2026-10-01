@@ -82,7 +82,6 @@ st.error(
     "Esta ação **NÃO PODE SER DESFEITA**."
 )
 
-# ---------- Dupla confirmação ----------
 st.markdown("**Para confirmar, faça as duas coisas abaixo:**")
 
 c1, c2 = st.columns(2)
@@ -124,7 +123,7 @@ if col1.button(
         st.session_state["msg_config"] = (
             "success",
             "🗑️ Sistema zerado com sucesso! Todos os dados foram apagados. "
-            "Vá para a página inicial para rodar o seed novamente."
+            "Vá para a página inicial para carregar os dados oficiais de 2026."
         )
         st.rerun()
     except Exception as e:
@@ -134,7 +133,6 @@ if col1.button(
 if not pode_zerar:
     col2.caption("☝️ Marque o checkbox e digite ZERAR")
 
-# ---------- Feedback ----------
 if "msg_config" in st.session_state:
     tipo, texto = st.session_state.pop("msg_config")
     getattr(st, tipo)(texto)
@@ -142,13 +140,14 @@ if "msg_config" in st.session_state:
 st.divider()
 
 # =====================================================================
-# 🌱 RODAR SEED NOVAMENTE
+# 🌱 CARREGAR DADOS OFICIAIS 2026
 # =====================================================================
-st.subheader("🌱 Recarregar dados oficiais 2026")
+st.subheader("🌱 Carregar dados oficiais de 2026")
 st.caption(
-    "Se o sistema estiver vazio (após zerar), este botão recarrega os dados "
+    "Se o sistema estiver vazio (após zerar), este botão carrega os dados "
     "oficiais do CTPM/Lavras 2026: ano letivo, componentes, matrizes, "
-    "grades de horário e turmas."
+    "grades de horário e turmas. **Depois de carregados, você pode editar "
+    "tudo livremente** pelas páginas de cada cadastro."
 )
 
 with engine.connect() as conn:
@@ -157,10 +156,10 @@ with engine.connect() as conn:
 if n_anos > 0:
     st.info(
         f"ℹ️ Já existe {n_anos} ano letivo cadastrado. "
-        "O seed só funciona em banco vazio. Zere primeiro."
+        "Este botão só funciona em banco vazio. Zere primeiro se quiser recomeçar."
     )
 else:
-    if st.button("🚀 Rodar seed 2026", type="primary"):
+    if st.button("🚀 Carregar dados oficiais de 2026", type="primary"):
         try:
             from core.seed_2026 import rodar_seed
             msg = rodar_seed()
