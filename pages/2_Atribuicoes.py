@@ -90,16 +90,38 @@ def calcular_situacao(row):
 comparativo["situacao"] = comparativo.apply(calcular_situacao, axis=1)
 comparativo["atribuida_anual"] = comparativo["atribuida_semana"] * 40
 
-# ---------- Cor por linha ----------
+# ---------- Cor por linha (adaptado para daltonismo) ----------
 def colorir(row):
     s = row["Situação"]
+
+    # ✅ OK = azul clarinho + borda azul escura
     if s.startswith("✅"):
-        return ["background-color: #d4edda"] * len(row)
+        estilo = (
+            "background-color: #D6EAF8; "
+            "border-left: 6px solid #2874A6; "
+            "color: #1B4F72; "
+            "font-weight: 500;"
+        )
+    # ⚠️ Faltam ou ❌ Não atribuído = vermelho claro + borda vermelha grossa
     elif s.startswith("⚠️") or s.startswith("❌"):
-        return ["background-color: #f8d7da"] * len(row)
+        estilo = (
+            "background-color: #FADBD8; "
+            "border-left: 6px solid #C0392B; "
+            "color: #78281F; "
+            "font-weight: 500;"
+        )
+    # 🟡 Excedem = amarelo claro + borda amarela escura
     elif s.startswith("🟡"):
-        return ["background-color: #fff3cd"] * len(row)
-    return [""] * len(row)
+        estilo = (
+            "background-color: #FCF3CF; "
+            "border-left: 6px solid #B7950B; "
+            "color: #7D6608; "
+            "font-weight: 500;"
+        )
+    else:
+        estilo = ""
+
+    return [estilo] * len(row)
 
 # ---------- Renomeia colunas para exibição ----------
 df_exibir = comparativo[[
@@ -118,6 +140,15 @@ df_exibir = comparativo[[
 
 styled = df_exibir.style.apply(colorir, axis=1)
 st.dataframe(styled, use_container_width=True, hide_index=True)
+
+# ---------- Legenda ----------
+st.caption(
+    "**Legenda:** "
+    "🔵 azul = ✅ OK · "
+    "🔴 vermelho = ⚠️/❌ faltando · "
+    "🟡 amarelo = excedendo. "
+    "A cor da borda esquerda também indica a situação."
+)
 
 # ---------- Estatísticas ----------
 total_matriz = int(comparativo["matriz_semana"].sum())
