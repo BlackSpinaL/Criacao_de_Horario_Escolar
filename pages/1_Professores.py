@@ -9,9 +9,6 @@ st.caption("Cadastre apenas o nome. O sistema calcula automaticamente o total de
 
 engine = get_engine()
 
-# =====================================================================
-# Mensagens de feedback
-# =====================================================================
 if "msg_prof" in st.session_state:
     tipo, texto = st.session_state.pop("msg_prof")
     getattr(st, tipo)(texto)
@@ -31,8 +28,7 @@ if submit:
         try:
             with engine.begin() as conn:
                 conn.execute(text(
-                    "INSERT INTO professores (nome, carga_max) "
-                    "VALUES (:n, 0)"
+                    "INSERT INTO professores (nome, carga_max) VALUES (:n, 0)"
                 ), {"n": nome.strip()})
             st.session_state["msg_prof"] = (
                 "success", f"✅ {nome.strip()} cadastrado(a)!"
@@ -40,15 +36,14 @@ if submit:
         except Exception as e:
             if "unique" in str(e).lower():
                 st.session_state["msg_prof"] = (
-                    "warning",
-                    f"⚠️ Já existe um professor com o nome '{nome}'."
+                    "warning", f"⚠️ Já existe '{nome}'."
                 )
             else:
                 st.session_state["msg_prof"] = ("error", f"Erro: {e}")
-    st.rerun()
+        st.rerun()
 
 # =====================================================================
-# 📋 LISTA COM TOTAIS CALCULADOS
+# 📋 LISTA
 # =====================================================================
 with engine.connect() as conn:
     ano_id = conn.execute(
@@ -74,11 +69,6 @@ with engine.connect() as conn:
                 0
             ) AS num_turmas,
             COALESCE(
-                (SELECT COUNT(DISTINCT a.componente_id) FROM atividades a
-                 WHERE a.professor_id = p.id AND a.ano_letivo_id = :ano),
-                0
-            ) AS num_disc,
-            COALESCE(
                 (SELECT STRING_AGG(DISTINCT c.nome, ', ')
                  FROM atividades a
                  JOIN componentes c ON c.id = a.componente_id
@@ -89,26 +79,56 @@ with engine.connect() as conn:
         ORDER BY p.nome
     """), conn, params={"ano": ano_id})
 
+df["total_anual"] = df["total_semanal"] * 40
+
 st.subheader(f"Cadastrados ({len(df)})")
 
 if df.empty:
-    st.info("Nenhum professor cadastrado ainda. Use o formulário acima.")
+    st.info("Nenhum professor cadastrado ainda.")
     st.stop()
 
-# ---------- Calcula anuais ----------
-df["total_anual"] = df["total_semanal"] * 40
+# =====================================================================
+# 🔎 FILTROS
+# =====================================================================
+col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
 
-# ---------- Prepara exibição ----------
-df_view = df[[
+with col_f1:
+    busca = st.text_input("🔍 Buscar por nome", placeholder="Digite parte do nome...")
+
+# Extrai disciplinas únicas para filtro
+todas_disc = set()
+for d in df["disciplinas"].dropna():
+    if d and d != "—":
+        for item in d.split(", "):
+            todas_disc.add(item.strip())
+lista_disc = ["(todas)"] + sorted(todas_disc)
+
+with col_f2:
+    filtro_disc = st.selectbox("Filtrar por disciplina", lista_disc)
+
+with col_f3:
+    st.write("")
+    st.write("")
+
+# Aplica filtros
+df_filt = df.copy()
+if busca:
+    df_filt = df_filt[df_filt["nome"].str.contains(busca, case=False, na=False)]
+if filtro_disc != "(todas)":
+    df_filt = df_filt[df_filt["disciplinas"].str.contains(filtro_disc, na=False)]
+
+# =====================================================================
+# 📊 TABELA
+# =====================================================================
+df_view = df_filt[[
     "id", "nome", "total_semanal", "total_anual",
-    "num_turmas", "num_disc", "disciplinas"
+    "num_turmas", "disciplinas"
 ]].rename(columns={
     "id": "ID",
     "nome": "Nome",
     "total_semanal": "Aulas/sem",
     "total_anual": "Aulas/ano",
     "num_turmas": "Turmas",
-    "num_disc": "Disc.",
     "disciplinas": "Disciplinas",
 })
 
@@ -118,25 +138,18 @@ editado = st.data_editor(
     df_view,
     column_config={
         "🗑️": st.column_config.CheckboxColumn(
-            "🗑️", help="Marque para deletar", default=False, width="small"
+            "🗑️", default=False, width="small"
         ),
         "ID": st.column_config.NumberColumn("ID", disabled=True, width="small"),
         "Nome": st.column_config.TextColumn("Nome", disabled=True, width="large"),
         "Aulas/sem": st.column_config.NumberColumn(
-            "Aulas/sem", disabled=True, width="small",
-            help="Total de aulas semanais em todas as turmas"
+            "Aulas/sem", disabled=True, width="small"
         ),
         "Aulas/ano": st.column_config.NumberColumn(
-            "Aulas/ano", disabled=True, width="small",
-            help="Total de aulas anuais (40 semanas)"
+            "Aulas/ano", disabled=True, width="small"
         ),
         "Turmas": st.column_config.NumberColumn(
-            "Turmas", disabled=True, width="small",
-            help="Quantidade de turmas em que leciona"
-        ),
-        "Disc.": st.column_config.NumberColumn(
-            "Disc.", disabled=True, width="small",
-            help="Quantidade de disciplinas que leciona"
+            "Turmas", disabled=True, width="small"
         ),
         "Disciplinas": st.column_config.TextColumn(
             "Disciplinas", disabled=True, width="large"
@@ -147,12 +160,84 @@ editado = st.data_editor(
     key="editor_profs",
 )
 
-# ---------- Rodapé com totais ----------
-total_geral_sem = int(df["total_semanal"].sum())
+# Rodapé com totais
+total_sem = int(df_filt["total_semanal"].sum())
 st.caption(
-    f"📊 **Total geral:** {len(df)} professores · "
-    f"{total_geral_sem} aulas/semana · {total_geral_sem * 40} aulas/ano"
+    f"📊 **Exibindo {len(df_filt)} de {len(df)} professores** · "
+    f"{total_sem} aulas/semana · {total_sem * 40} aulas/ano"
 )
+
+# =====================================================================
+# 📥 EXPORTAR CSV
+# =====================================================================
+col_exp1, col_exp2, _ = st.columns([1, 1, 3])
+csv = df_filt[[
+    "nome", "total_semanal", "total_anual", "num_turmas", "disciplinas"
+]].rename(columns={
+    "nome": "Professor",
+    "total_semanal": "Aulas semanais",
+    "total_anual": "Aulas anuais",
+    "num_turmas": "Turmas",
+    "disciplinas": "Disciplinas",
+}).to_csv(index=False).encode("utf-8")
+
+col_exp1.download_button(
+    "⬇️ Exportar CSV",
+    csv,
+    "professores.csv",
+    "text/csv",
+    use_container_width=True,
+)
+
+# =====================================================================
+# 👁️ DETALHES DO PROFESSOR
+# =====================================================================
+st.divider()
+st.subheader("👁️ Detalhes do Professor")
+
+if df.empty:
+    st.info("Nenhum professor cadastrado ainda.")
+else:
+    prof_sel = st.selectbox(
+        "Escolha um professor para ver os detalhes",
+        df["nome"].tolist(),
+        key="detalhe_prof",
+    )
+    prof_id = int(df.loc[df["nome"] == prof_sel, "id"].iloc[0])
+    prof_dados = df.loc[df["id"] == prof_id].iloc[0]
+
+    # Cards resumo
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Aulas/semana", int(prof_dados["total_semanal"]))
+    c2.metric("Aulas/ano", int(prof_dados["total_anual"]))
+    c3.metric("Turmas", int(prof_dados["num_turmas"]))
+    c4.metric(
+        "Disciplinas",
+        len([d for d in str(prof_dados["disciplinas"]).split(",") if d.strip() and d.strip() != "—"])
+    )
+
+    # Tabela de atribuições detalhadas
+    with engine.connect() as conn:
+        detalhes = pd.read_sql(text("""
+            SELECT
+                t.codigo AS "Turma",
+                t.serie AS "Série",
+                t.turno AS "Turno",
+                c.nome AS "Disciplina",
+                a.aulas_semana AS "Aulas/sem",
+                a.aulas_semana * 40 AS "Aulas/ano"
+            FROM atividades a
+            JOIN turmas t ON t.id = a.turma_id
+            JOIN componentes c ON c.id = a.componente_id
+            WHERE a.professor_id = :p AND a.ano_letivo_id = :ano
+            ORDER BY t.codigo, c.nome
+        """), conn, params={"p": prof_id, "ano": ano_id})
+
+    if detalhes.empty:
+        st.info(f"ℹ️ **{prof_sel}** ainda não tem aulas atribuídas.")
+    else:
+        st.markdown(f"**Aulas atribuídas a {prof_sel}:**")
+        st.dataframe(detalhes, use_container_width=True, hide_index=True)
 
 # =====================================================================
 # 🗑️ BARRA DE AÇÕES
@@ -167,7 +252,6 @@ else:
     ids = marcados["ID"].astype(int).tolist()
     placeholders = ",".join(str(i) for i in ids)
 
-    # Verifica se têm atividades vinculadas
     with engine.connect() as conn:
         conflitos = pd.read_sql(text(f"""
             SELECT p.nome, COUNT(a.id) AS n_atv
@@ -181,15 +265,14 @@ else:
     if not conflitos.empty:
         col1.warning(f"⚠️ {n_marc} selecionado(s) com aulas atribuídas")
         st.warning(
-            "**Atenção:** os professores abaixo têm aulas atribuídas. "
-            "Deletá-los removerá **também** essas atribuições:\n\n" +
+            "**Atenção:** estes professores têm aulas atribuídas:\n\n" +
             "\n".join([
                 f"- **{r.nome}** — {r.n_atv} aula(s)"
                 for r in conflitos.itertuples()
             ])
         )
         confirmar = st.checkbox(
-            "☑️ Confirmo que quero deletar **e** suas atribuições"
+            "☑️ Confirmo deletar **e** as atribuições vinculadas"
         )
         if col2.button(
             f"🗑️ Deletar ({n_marc})",
@@ -205,8 +288,7 @@ else:
                         f"DELETE FROM professores WHERE id IN ({placeholders})"
                     ))
                 st.session_state["msg_prof"] = (
-                    "success",
-                    f"🗑️ {n_marc} professor(es) deletado(s)!"
+                    "success", f"🗑️ {n_marc} professor(es) deletado(s)!"
                 )
             except Exception as e:
                 st.session_state["msg_prof"] = ("error", f"Erro: {e}")
