@@ -163,6 +163,87 @@ st.download_button(
 )
 
 # =====================================================================
+# ✏️ EDITAR COMPONENTE
+# =====================================================================
+st.divider()
+st.subheader("✏️ Editar componente")
+
+with st.expander("Clique para editar", expanded=False):
+    opcoes = df["id"].tolist()
+    comp_edit_sel = st.selectbox(
+        "Escolha o componente",
+        opcoes,
+        format_func=lambda x: df.loc[df["id"] == x, "nome"].iloc[0],
+        key="comp_edit_sel",
+    )
+
+    comp_atual = df.loc[df["id"] == comp_edit_sel].iloc[0]
+
+    # Descobre índice da mãe atual
+    if comp_atual["agrupa_com"] and comp_atual["agrupa_com"] in opcoes_mae:
+        idx_mae = opcoes_mae.index(comp_atual["agrupa_com"])
+    else:
+        idx_mae = 0
+
+    idx_area = ["Linguagens", "Matemática", "Ciências", "Humanas",
+                "Ensino Religioso", "Outros"].index(comp_atual["area"]) \
+        if comp_atual["area"] in ["Linguagens", "Matemática", "Ciências",
+                                   "Humanas", "Ensino Religioso", "Outros"] else 5
+
+    with st.form("form_editar_comp"):
+        c1, c2 = st.columns([3, 2])
+        novo_nome = c1.text_input("Nome", value=comp_atual["nome"])
+        nova_area = c2.selectbox(
+            "Área",
+            ["Linguagens", "Matemática", "Ciências", "Humanas",
+             "Ensino Religioso", "Outros"],
+            index=idx_area,
+        )
+        c3, c4 = st.columns([2, 2])
+        novo_lab = c3.checkbox(
+            "Tem prática no laboratório?",
+            value=bool(comp_atual["pratica_lab"]),
+        )
+        nova_mae = c4.selectbox(
+            "É filha de qual componente?",
+            opcoes_mae,
+            index=idx_mae,
+        )
+
+        if st.form_submit_button("💾 Salvar alterações", type="primary"):
+            if not novo_nome.strip():
+                st.error("Informe o nome.")
+            elif nova_mae == novo_nome.strip():
+                st.error("Um componente não pode ser filho dele mesmo.")
+            else:
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text("""
+                            UPDATE componentes
+                            SET nome = :n,
+                                area = :a,
+                                pratica_lab = :p,
+                                agrupa_com = :m
+                            WHERE id = :id
+                        """), {
+                            "n": novo_nome.strip(),
+                            "a": nova_area,
+                            "p": novo_lab,
+                            "m": None if nova_mae == "(nenhuma)" else nova_mae,
+                            "id": int(comp_edit_sel),
+                        })
+                    st.session_state["msg_comp"] = (
+                        "success",
+                        f"✅ Componente '{novo_nome.strip()}' atualizado!"
+                    )
+                    st.rerun()
+                except Exception as e:
+                    if "unique" in str(e).lower():
+                        st.error(f"⚠️ Já existe um componente com o nome '{novo_nome}'.")
+                    else:
+                        st.error(f"Erro: {e}")
+
+# =====================================================================
 # 👁️ DETALHES DO COMPONENTE
 # =====================================================================
 st.divider()
@@ -182,7 +263,6 @@ c1.metric("Área", comp_dados["area"] or "—")
 c2.metric("Em matrizes", int(comp_dados["em_matrizes"]))
 c3.metric("Aulas atribuídas", int(comp_dados["em_atividades"]))
 
-# Onde este componente aparece (matrizes)
 with engine.connect() as conn:
     por_serie = pd.read_sql(text("""
         SELECT
