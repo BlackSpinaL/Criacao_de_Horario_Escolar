@@ -234,6 +234,87 @@ col_exp1.download_button(
 )
 
 # =====================================================================
+# ✏️ EDITAR PROFESSOR
+# =====================================================================
+st.divider()
+st.subheader("✏️ Editar professor")
+st.caption(
+    "Use esta seção quando o professor foi cadastrado sem o Nº PM, "
+    "ou quando precisar corrigir o nome/Nº PM depois."
+)
+
+if df.empty:
+    st.info("Nenhum professor cadastrado ainda.")
+else:
+    with st.expander("Clique para editar", expanded=True):
+        opcoes = df["id"].tolist()
+        prof_edit_sel = st.selectbox(
+            "Escolha o professor",
+            opcoes,
+            format_func=lambda x: (
+                f"{df.loc[df['id'] == x, 'nome'].iloc[0]} "
+                f"({df.loc[df['id'] == x, 'numero_pm'].iloc[0]})"
+            ),
+            key="prof_edit_sel",
+        )
+
+        prof_atual = df.loc[df["id"] == prof_edit_sel].iloc[0]
+        pm_atual = "" if prof_atual["numero_pm"] == "—" else prof_atual["numero_pm"]
+
+        with st.form("form_editar_prof"):
+            c1, c2 = st.columns([3, 1])
+            novo_nome = c1.text_input(
+                "Nome completo",
+                value=prof_atual["nome"],
+            )
+            novo_pm = c2.text_input(
+                "Nº PM",
+                value=pm_atual,
+                placeholder="000000-0",
+            )
+
+            if st.form_submit_button("💾 Salvar alterações", type="primary"):
+                nome_limpo = novo_nome.strip()
+                num_pm = validar_numero_pm(novo_pm.strip()) if novo_pm.strip() else None
+
+                if not nome_limpo:
+                    st.error("Informe o nome completo.")
+                elif novo_pm.strip() and num_pm is None:
+                    st.error(
+                        "Nº PM inválido. Use o formato **000000-0** "
+                        "(6 dígitos + hífen + 1 dígito)."
+                    )
+                else:
+                    try:
+                        with engine.begin() as conn:
+                            conn.execute(text("""
+                                UPDATE professores
+                                SET nome = :n, numero_pm = :pm
+                                WHERE id = :id
+                            """), {
+                                "n": nome_limpo,
+                                "pm": num_pm,
+                                "id": int(prof_edit_sel),
+                            })
+                        st.session_state["msg_prof"] = (
+                            "success",
+                            f"✅ Dados de {nome_limpo} atualizados com sucesso!"
+                        )
+                        st.rerun()
+                    except Exception as e:
+                        erro = str(e).lower()
+                        if "idx_professores_numero_pm" in erro or "numero_pm" in erro:
+                            st.error(
+                                f"⚠️ Já existe outro professor com o Nº PM {num_pm}."
+                            )
+                        elif "unique" in erro:
+                            st.error(
+                                f"⚠️ Já existe outro professor com o nome '{nome_limpo}'."
+                            )
+                        else:
+                            st.error(f"Erro: {e}")
+
+# =====================================================================
 # 👁️ DETALHES DO PROFESSOR
 # =====================================================================
 st.divider()
