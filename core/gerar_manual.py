@@ -61,7 +61,6 @@ def _cabecalho_rodape(canvas, doc):
     canvas.saveState()
     largura, altura = A4
 
-    # Cabeçalho
     canvas.setFillColor(AZUL)
     canvas.setFont("Helvetica-Bold", 8)
     canvas.drawString(2 * cm, altura - 1.2 * cm, "CTPM/Lavras — Sistema de Grade Horária")
@@ -69,7 +68,6 @@ def _cabecalho_rodape(canvas, doc):
     canvas.setLineWidth(0.5)
     canvas.line(2 * cm, altura - 1.4 * cm, largura - 2 * cm, altura - 1.4 * cm)
 
-    # Rodapé
     canvas.setFillColor(CINZA)
     canvas.setFont("Helvetica", 8)
     canvas.drawCentredString(largura / 2, 1.2 * cm, f"Página {doc.page}")
@@ -127,7 +125,7 @@ def gerar_manual_bytes():
     story.append(Paragraph(
         "A ordem abaixo é a recomendada para a primeira utilização do "
         "sistema. Uma vez configurado, o uso diário resume-se às etapas "
-        "3.3 e 3.2.", e["corpo"],
+        "3.4 e 3.2.", e["corpo"],
     ))
     story.append(Spacer(1, 0.3 * cm))
 
@@ -139,8 +137,9 @@ def gerar_manual_bytes():
         ["4", "2.5 Atribuições", "Vincular professor × disciplina × turma"],
         ["5", "3.1 Disponibilidade", "Enviar link para cada professor"],
         ["6", "3.2 Gerar Grade", "Gerar a grade (várias versões)"],
-        ["7", "3.3 Pendências", "Verificar o que ficou faltando"],
-        ["8", "4.1 QR Codes", "Distribuir acessos aos professores"],
+        ["7", "3.3 Exportar Grade", "Gerar PDF/Excel para imprimir"],
+        ["8", "3.4 Pendências", "Verificar o que ficou faltando"],
+        ["9", "4.1 QR Codes", "Distribuir acessos aos professores"],
     ]
     t = Table(dados_guia, colWidths=[1.5 * cm, 3.5 * cm, 11 * cm])
     t.setStyle(TableStyle([
@@ -297,8 +296,39 @@ def gerar_manual_bytes():
         e["nota"],
     ))
 
-    # 3.3
-    story.append(Paragraph("3.3 📊 Pendências", e["h2"]))
+    # 3.3 — NOVO
+    story.append(Paragraph("3.3 📄 Exportar Grade", e["h2"]))
+    story.append(Paragraph(
+        "Gera arquivos prontos para imprimir e colocar no mural, ou para "
+        "editar no Excel.",
+        e["corpo"],
+    ))
+    story.append(Paragraph("<b>Formatos disponíveis:</b>", e["passo"]))
+    story.append(Paragraph(
+        "• <b>📄 PDF (para impressão):</b> uma página por turma, formato "
+        "paisagem (A4). Mostra cada aula com nome da disciplina e do professor. "
+        "Ideal para impressão em massa.", e["passo"],
+    ))
+    story.append(Paragraph(
+        "• <b>📊 Excel (para edição):</b> uma aba consolidada com todas as "
+        "aulas + uma aba por turma. Ideal para ajustes no Excel ou Google "
+        "Sheets.", e["passo"],
+    ))
+    story.append(Paragraph("<b>Como usar:</b>", e["passo"]))
+    story.append(Paragraph("1. Escolha o escopo (todas as turmas ou algumas).",
+                          e["passo"]))
+    story.append(Paragraph("2. Clique em <b>🖨️ Gerar PDF</b> ou <b>📊 Gerar Excel</b>.",
+                          e["passo"]))
+    story.append(Paragraph("3. Clique em <b>⬇️ Baixar</b> para salvar o arquivo.",
+                          e["passo"]))
+    story.append(Paragraph(
+        "<b>Pré-visualização:</b> no fim da página, você pode ver a grade de "
+        "uma turma específica antes de exportar.",
+        e["nota"],
+    ))
+
+    # 3.4
+    story.append(Paragraph("3.4 📊 Pendências", e["h2"]))
     story.append(Paragraph(
         "O Painel de Pendências mostra, em 4 seções, o que falta antes de "
         "gerar a grade:",
@@ -310,8 +340,8 @@ def gerar_manual_bytes():
     story.append(Paragraph("• Disciplinas sem professor.", e["passo"]))
     story.append(Paragraph("• Feedbacks enviados pelos professores.", e["passo"]))
 
-    # 3.4
-    story.append(Paragraph("3.4 📅 Meu Horário", e["h2"]))
+    # 3.5
+    story.append(Paragraph("3.5 📅 Meu Horário", e["h2"]))
     story.append(Paragraph(
         "O professor acessa sua grade pronta através de link individual. "
         "Pode reportar problemas diretamente à coordenação.",
@@ -364,6 +394,29 @@ def gerar_manual_bytes():
     story.append(PageBreak())
 
     # ==================================================================
+    # SEÇÃO 6 — TUTORIAIS
+    # ==================================================================
+    story.append(Paragraph("6. 📚 Tutoriais", e["h1"]))
+    story.append(Paragraph(
+        "Esta seção oferece dois recursos de apoio:",
+        e["corpo"],
+    ))
+    story.append(Paragraph(
+        "• <b>6.1 Manual do Usuário:</b> guia passo a passo dentro do próprio "
+        "sistema, com expanders para cada seção. Você também pode baixar este "
+        "PDF clicando em <b>📥 Baixar Manual em PDF</b>.",
+        e["passo"],
+    ))
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(Paragraph(
+        "<b>Dica:</b> Recomendamos ler o manual completo (este PDF) antes de "
+        "começar a usar o sistema, e consultar a página 6.1 sempre que tiver "
+        "dúvidas rápidas.",
+        e["nota"],
+    ))
+    story.append(PageBreak())
+
+    # ==================================================================
     # FAQ
     # ==================================================================
     story.append(Paragraph("❓ Perguntas frequentes", e["h1"]))
@@ -386,6 +439,16 @@ def gerar_manual_bytes():
          "<b>⚙️ Configurações → 🗑️ Zerar sistema</b> (digite ZERAR e "
          "marque o checkbox). Depois volte em Início e clique em "
          "Carregar dados."),
+        ("O professor não consegue acessar o link",
+         "Verifique se o link está correto. Tente o link por Nº PM ou "
+         "gere um QR Code em <b>📱 QR Codes</b>."),
+        ("O PDF ficou com muitas páginas, dá para reduzir?",
+         "Sim! Em <b>📄 Exportar Grade</b>, escolha <b>Selecionar turmas "
+         "específicas</b> e marque apenas as que deseja incluir."),
+        ("Como editar a grade depois de gerada?",
+         "Você pode: (1) gerar uma nova versão em <b>🎯 Gerar Grade</b>, "
+         "(2) restaurar uma versão anterior, ou (3) exportar para Excel "
+         "em <b>📄 Exportar Grade</b> e editar manualmente."),
     ]
 
     for pergunta, resposta in faqs:
