@@ -10,13 +10,174 @@ st.set_page_config(
 )
 
 # =====================================================================
+# CARREGA A FONTE RAWLINE (a partir dos arquivos do próprio repositório)
+# =====================================================================
+def carregar_fonte_rawline():
+    """Injeta o CSS que carrega a fonte Rawline via jsDelivr."""
+    # URL base do CDN que serve arquivos do SEU repositório
+    BASE = (
+        "https://cdn.jsdelivr.net/gh/"
+        "BlackSpinal/Criacao_de_Horario_Escolar@main/static/fonts/"
+    )
+
+    css = f"""
+    <style>
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: normal;
+        font-weight: 100;
+        src: url('{BASE}rawline-100.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: italic;
+        font-weight: 100;
+        src: url('{BASE}rawline-100i.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: normal;
+        font-weight: 200;
+        src: url('{BASE}rawline-200.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: italic;
+        font-weight: 200;
+        src: url('{BASE}rawline-200i.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: normal;
+        font-weight: 300;
+        src: url('{BASE}rawline-300.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: italic;
+        font-weight: 300;
+        src: url('{BASE}rawline-300i.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: normal;
+        font-weight: 400;
+        src: url('{BASE}rawline-400.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: italic;
+        font-weight: 400;
+        src: url('{BASE}rawline-400i.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: normal;
+        font-weight: 500;
+        src: url('{BASE}rawline-500.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: italic;
+        font-weight: 500;
+        src: url('{BASE}rawline-500i.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: normal;
+        font-weight: 600;
+        src: url('{BASE}rawline-600.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: italic;
+        font-weight: 600;
+        src: url('{BASE}rawline-600i.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: normal;
+        font-weight: 700;
+        src: url('{BASE}rawline-700.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: italic;
+        font-weight: 700;
+        src: url('{BASE}rawline-700i.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: normal;
+        font-weight: 800;
+        src: url('{BASE}rawline-800.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: italic;
+        font-weight: 800;
+        src: url('{BASE}rawline-800i.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: normal;
+        font-weight: 900;
+        src: url('{BASE}rawline-900.ttf') format('truetype');
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Rawline';
+        font-style: italic;
+        font-weight: 900;
+        src: url('{BASE}rawline-900i.ttf') format('truetype');
+        font-display: swap;
+    }}
+
+    /* Aplica a fonte em TODO o aplicativo */
+    html, body, [class*="css"], .stApp, .stMarkdown,
+    h1, h2, h3, h4, h5, h6, p, span, div, label,
+    button, input, textarea, select, table, th, td,
+    .stMetric, .stButton, .stSelectbox, .stTextInput,
+    .stDataFrame, .stDataEditor, .stTabs, .stExpander,
+    section[data-testid="stSidebar"] * {{
+        font-family: 'Rawline', -apple-system, sans-serif !important;
+    }}
+
+    /* Ajustes de peso para deixar a hierarquia clara */
+    h1 {{ font-weight: 700 !important; }}
+    h2, h3 {{ font-weight: 600 !important; }}
+    .stMetric label {{ font-weight: 500 !important; }}
+    .stMetric [data-testid="stMetricValue"] {{ font-weight: 700 !important; }}
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+
+carregar_fonte_rawline()
+
+# =====================================================================
 # PÁGINA INICIAL (Início)
 # =====================================================================
 def pagina_inicio():
     st.title("🏫 Sistema de Grade Horária")
     st.caption("CTPM/Lavras — Ano Letivo 2026")
 
-    # Testa conexão
     try:
         engine = get_engine()
         with engine.connect() as conn:
@@ -65,7 +226,6 @@ def pagina_inicio():
 
     st.divider()
 
-    # Guia rápido de uso
     st.subheader("🧭 Guia rápido")
     st.markdown("""
     **Siga esta ordem para configurar o sistema:**
@@ -83,7 +243,7 @@ def pagina_inicio():
 
 
 # =====================================================================
-# ESTRUTURA DO MENU LATERAL (com numeração e seções)
+# ESTRUTURA DO MENU LATERAL
 # =====================================================================
 paginas = {
     "2. 📋 CADASTROS": [
