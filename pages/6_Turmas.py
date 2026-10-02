@@ -81,7 +81,7 @@ with st.form("nova_turma", clear_on_submit=True):
 with engine.connect() as conn:
     df = pd.read_sql(text("""
         SELECT t.id, t.codigo, t.serie, t.turno, t.segmento,
-               t.alunos,
+               t.alunos, t.grade_horaria_id,
                g.titulo AS grade,
                COALESCE(
                    (SELECT SUM(a.aulas_semana) FROM atividades a
@@ -172,6 +172,79 @@ csv = df_filt[[
 st.download_button(
     "⬇️ Exportar CSV", csv, "turmas.csv", "text/csv",
 )
+
+# =====================================================================
+# ✏️ EDITAR TURMA
+# =====================================================================
+st.divider()
+st.subheader("✏️ Editar turma")
+
+with st.expander("Clique para editar", expanded=False):
+    opcoes = df["id"].tolist()
+    turma_edit_sel = st.selectbox(
+        "Escolha a turma",
+        opcoes,
+        format_func=lambda x: (
+            f"{df.loc[df['id'] == x, 'codigo'].iloc[0]} — "
+            f"{df.loc[df['id'] == x, 'serie'].iloc[0]}"
+        ),
+        key="turma_edit_sel",
+    )
+
+    turma_atual = df.loc[df["id"] == turma_edit_sel].iloc[0]
+    idx_grade_atual = grades["id"].tolist().index(int(turma_atual["grade_horaria_id"]))
+
+    with st.form("form_editar_turma"):
+        c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+        novo_codigo = c1.text_input("Código", value=turma_atual["codigo"])
+        nova_serie = c2.text_input("Série", value=turma_atual["serie"])
+        nova_grade_id = c3.selectbox(
+            "Turno/Segmento",
+            grades["id"].tolist(),
+            index=idx_grade_atual,
+            format_func=lambda x: grades.loc[grades["id"] == x, "titulo"].iloc[0],
+        )
+        novos_alunos = c4.number_input(
+            "Alunos", 0, 100, int(turma_atual["alunos"]), step=1
+        )
+
+        if st.form_submit_button("💾 Salvar alterações", type="primary"):
+            if not novo_codigo.strip() or not nova_serie.strip():
+                st.error("Código e série são obrigatórios.")
+            else:
+                grade_row = grades.loc[grades["id"] == nova_grade_id].iloc[0]
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text("""
+                            UPDATE turmas
+                            SET codigo = :c,
+                                serie = :s,
+                                nome = :n,
+                                turno = :t,
+                                segmento = :sg,
+                                grade_horaria_id = :g,
+                                alunos = :al
+                            WHERE id = :id
+                        """), {
+                            "c": novo_codigo.strip(),
+                            "s": nova_serie.strip(),
+                            "n": f"{nova_serie.strip()} ({novo_codigo.strip()})",
+                            "t": grade_row["turno"],
+                            "sg": grade_row["chave"],
+                            "g": int(nova_grade_id),
+                            "al": novos_alunos,
+                            "id": int(turma_edit_sel),
+                        })
+                    st.session_state["msg_turma"] = (
+                        "success",
+                        f"✅ Turma {novo_codigo.strip()} atualizada!"
+                    )
+                    st.rerun()
+                except Exception as e:
+                    if "unique" in str(e).lower():
+                        st.error(f"⚠️ Já existe outra turma com o código '{novo_codigo}'.")
+                    else:
+                        st.error(f"Erro: {e}")
 
 # =====================================================================
 # 👁️ DETALHES DA TURMA
