@@ -76,8 +76,9 @@ def pagina_inicio():
     4. **🔗 Atribuições** — vincule professor × disciplina × turma
     5. **🚫 Disponibilidade** — envie o link para cada professor
     6. **🎯 Gerar Grade** — gere a grade (pode ser várias versões)
-    7. **📊 Pendências** — verifique o que ficou faltando
-    8. **📱 QR Codes** — distribua os acessos aos professores
+    7. **📄 Exportar Grade** — PDF/Excel para imprimir
+    8. **📊 Pendências** — verifique o que ficou faltando
+    9. **📱 QR Codes** — distribua os acessos aos professores
     """)
 
 
@@ -95,8 +96,9 @@ paginas = {
     "3. 🎯 GRADE HORÁRIA": [
         st.Page("pages/disponibilidade.py", title="3.1 🚫 Disponibilidade", icon="🚫"),
         st.Page("pages/gerar.py", title="3.2 🎯 Gerar Grade", icon="🎯"),
-        st.Page("pages/pendencias.py", title="3.3 📊 Pendências", icon="📊"),
-        st.Page("pages/meu_horario.py", title="3.4 📅 Meu Horário", icon="📅"),
+        st.Page("pages/exportar_grade.py", title="3.3 📄 Exportar Grade", icon="📄"),
+        st.Page("pages/pendencias.py", title="3.4 📊 Pendências", icon="📊"),
+        st.Page("pages/meu_horario.py", title="3.5 📅 Meu Horário", icon="📅"),
     ],
     "4. 📱 EXTRAS": [
         st.Page("pages/qr_codes.py", title="4.1 📱 QR Codes", icon="📱"),
