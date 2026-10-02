@@ -34,7 +34,7 @@ st.divider()
 st.header("🎯 Guia rápido de uso")
 st.markdown(
     "A ordem abaixo é a **recomendada** para a primeira utilização do "
-    "sistema. Uma vez configurado, o uso diário resume-se às etapas 3.3 "
+    "sistema. Uma vez configurado, o uso diário resume-se às etapas 3.4 "
     "e 3.2."
 )
 
@@ -47,8 +47,9 @@ st.markdown("""
 | 4 | **2.5 Atribuições** | Vincular professor × disciplina × turma |
 | 5 | **3.1 Disponibilidade** | Enviar link para cada professor |
 | 6 | **3.2 Gerar Grade** | Gerar a grade (várias versões) |
-| 7 | **3.3 Pendências** | Verificar o que ficou faltando |
-| 8 | **4.1 QR Codes** | Distribuir acessos aos professores |
+| 7 | **3.3 Exportar Grade** | Gerar PDF/Excel para imprimir |
+| 8 | **3.4 Pendências** | Verificar o que ficou faltando |
+| 9 | **4.1 QR Codes** | Distribuir acessos aos professores |
 """)
 
 st.divider()
@@ -180,7 +181,34 @@ with st.expander("3.2 🎯 Gerar Grade", expanded=False):
     - 🗑️ Deletar versões antigas
     """)
 
-with st.expander("3.3 📊 Pendências", expanded=False):
+with st.expander("3.3 📄 Exportar Grade", expanded=False):
+    st.markdown("""
+    Gera arquivos prontos para **imprimir e colocar no mural** ou para
+    **editar no Excel**.
+
+    **Formatos disponíveis:**
+
+    **📄 PDF (para impressão)**
+    - Uma página por turma
+    - Formato paisagem (A4)
+    - Mostra cada aula com nome da disciplina e do professor
+    - Ideal para impressão em massa
+
+    **📊 Excel (para edição)**
+    - Uma aba consolidada com TODAS as aulas
+    - Uma aba por turma (formato de grade visual)
+    - Ideal para ajustes no Excel ou Google Sheets
+
+    **Como usar:**
+    1. Escolha o escopo (todas as turmas ou só algumas)
+    2. Clique em **🖨️ Gerar PDF** ou **📊 Gerar Excel**
+    3. Clique em **⬇️ Baixar** para salvar
+
+    **Pré-visualização:** role até o fim para ver a grade de uma turma
+    específica antes de exportar.
+    """)
+
+with st.expander("3.4 📊 Pendências", expanded=False):
     st.markdown("""
     O Painel de Pendências mostra o que falta antes de gerar a grade:
 
@@ -199,7 +227,7 @@ with st.expander("3.3 📊 Pendências", expanded=False):
     ⚠️ **Use este painel ANTES de gerar** para evitar grades incompletas.
     """)
 
-with st.expander("3.4 📅 Meu Horário", expanded=False):
+with st.expander("3.5 📅 Meu Horário", expanded=False):
     st.markdown("""
     O professor acessa sua **grade pronta** através de link individual.
 
@@ -273,6 +301,13 @@ faqs = [
     ("O professor não consegue acessar o link",
      "Verifique se o link está correto. Tente o link por Nº PM ou "
      "gere um QR Code em **📱 QR Codes**."),
+    ("O PDF ficou com muitas páginas, dá para reduzir?",
+     "Sim! Em **📄 Exportar Grade**, escolha **Selecionar turmas "
+     "específicas** e marque apenas as que deseja incluir no PDF."),
+    ("Como editar a grade depois de gerada?",
+     "Você pode: (1) gerar uma nova versão em **🎯 Gerar Grade**, "
+     "(2) restaurar uma versão anterior, ou (3) exportar para Excel "
+     "em **📄 Exportar Grade** e editar manualmente."),
 ]
 
 for i, (pergunta, resposta) in enumerate(faqs, start=1):
