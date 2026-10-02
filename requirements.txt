@@ -2,3 +2,5 @@ streamlit>=1.32
 sqlalchemy>=2.0
 psycopg2-binary>=2.9
 pandas>=2.0
+ortools>=9.8
+openpyxl>=3.1
