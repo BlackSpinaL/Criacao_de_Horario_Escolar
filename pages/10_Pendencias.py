@@ -37,12 +37,7 @@ with engine.connect() as conn:
                 (SELECT COUNT(*) FROM restricoes_professor r
                  WHERE r.professor_id = p.id),
                 0
-            ) AS n_restricoes,
-            COALESCE(
-                (SELECT MAX(rp.id) FROM restricoes_professor rp
-                 WHERE rp.professor_id = p.id),
-                0
-            ) AS ultima_marca
+            ) AS n_restricoes
         FROM professores p
         ORDER BY p.nome
     """), conn)
@@ -50,11 +45,6 @@ with engine.connect() as conn:
 if df_disp.empty:
     st.info("Nenhum professor cadastrado ainda.")
 else:
-    # Consideramos que "preencheu" se tem pelo menos 1 restrição registrada
-    # OU se o usuário marcou explicitamente "não tenho indisponibilidade".
-    # Como não temos essa marca, usamos o critério: n_restricoes > 0.
-    # Se quiser ser mais rigoroso, adicione uma tabela de "disponibilidade_preenchida".
-
     df_disp["status"] = df_disp["n_restricoes"].apply(
         lambda x: "✅ Preencheu" if x > 0 else "❌ Não preencheu"
     )
@@ -66,15 +56,17 @@ else:
     c1, c2, c3 = st.columns(3)
     c1.metric("Total de professores", total)
     c2.metric("✅ Preencheram", int(preencheram))
-    c3.metric("❌ Faltam", int(faltam),
-              delta=f"-{faltam}" if faltam > 0 else None,
-              delta_color="inverse" if faltam > 0 else "off")
+    c3.metric(
+        "❌ Faltam", int(faltam),
+        delta=f"-{faltam}" if faltam > 0 else None,
+        delta_color="inverse" if faltam > 0 else "off",
+    )
 
-    # Filtro
     filtro = st.radio(
         "Mostrar",
         ["Todos", "Só quem falta", "Só quem preencheu"],
         horizontal=True,
+        key="filtro_disp",
     )
 
     df_view = df_disp.copy()
@@ -98,7 +90,6 @@ else:
             f"Envie o link individual (página 🚫 Minha Disponibilidade)."
         )
 
-    # Botão para exportar
     csv = df_view.to_csv(index=False).encode("utf-8")
     st.download_button(
         "⬇️ Exportar lista de pendências",
@@ -222,3 +213,86 @@ else:
         use_container_width=True,
         hide_index=True,
     )
+
+st.divider()
+
+# =====================================================================
+# 4. FEEDBACK DOS PROFESSORES
+# =====================================================================
+st.subheader("4️⃣ Feedback dos professores")
+st.caption("Problemas relatados pelos professores sobre a grade gerada.")
+
+with engine.connect() as conn:
+    df_fb = pd.read_sql(text("""
+        SELECT f.id, p.nome AS professor, p.numero_pm,
+               f.tipo, f.mensagem, f.status, f.criado_em
+        FROM feedback_professores f
+        JOIN professores p ON p.id = f.professor_id
+        ORDER BY
+            CASE WHEN f.status = 'aberto' THEN 0 ELSE 1 END,
+            f.id DESC
+    """), conn)
+
+if df_fb.empty:
+    st.success("✅ Nenhum feedback pendente no momento.")
+else:
+    abertos = (df_fb["status"] == "aberto").sum()
+    resolvidos = (df_fb["status"] != "aberto").sum()
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total", len(df_fb))
+    c2.metric("🔴 Abertos", int(abertos))
+    c3.metric("✅ Resolvidos", int(resolvidos))
+
+    filtro_fb = st.radio(
+        "Mostrar",
+        ["Abertos", "Todos", "Resolvidos"],
+        horizontal=True,
+        key="filtro_feedback",
+    )
+
+    df_fb_view = df_fb.copy()
+    if filtro_fb == "Abertos":
+        df_fb_view = df_fb_view[df_fb_view["status"] == "aberto"]
+    elif filtro_fb == "Resolvidos":
+        df_fb_view = df_fb_view[df_fb_view["status"] != "aberto"]
+
+    st.dataframe(
+        df_fb_view[[
+            "professor", "numero_pm", "tipo", "mensagem",
+            "status", "criado_em"
+        ]].rename(columns={
+            "professor": "Professor",
+            "numero_pm": "Nº PM",
+            "tipo": "Tipo",
+            "mensagem": "Mensagem",
+            "status": "Status",
+            "criado_em": "Enviado em",
+        }),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    if not df_fb_view.empty:
+        col_r1, col_r2 = st.columns([2, 2])
+        fb_id = col_r1.selectbox(
+            "Marcar como resolvido",
+            [""] + df_fb_view["id"].tolist(),
+            format_func=lambda x: (
+                "—" if x == "" else
+                f"#{x} — "
+                f"{df_fb.loc[df_fb['id'] == x, 'professor'].iloc[0]}"
+            ),
+            key="fb_resolver",
+        )
+        if fb_id and col_r2.button("✅ Marcar como resolvido"):
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(
+                        "UPDATE feedback_professores SET status = 'resolvido' "
+                        "WHERE id = :id"
+                    ), {"id": int(fb_id)})
+                st.success("Feedback marcado como resolvido!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro: {e}")
