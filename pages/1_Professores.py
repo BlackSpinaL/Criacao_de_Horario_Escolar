@@ -1,46 +1,81 @@
 import streamlit as st
 import pandas as pd
+import re
 from sqlalchemy import text
 from core.db import get_engine
 
 st.set_page_config(page_title="Professores", page_icon="👨‍🏫", layout="wide")
 st.title("👨‍🏫 Professores")
-st.caption("Cadastre apenas o nome. O sistema calcula automaticamente o total de aulas.")
+st.caption("Cadastre o nome completo e o Nº PM. O sistema calcula automaticamente o total de aulas.")
 
 engine = get_engine()
 
+# =====================================================================
+# Mensagens de feedback
+# =====================================================================
 if "msg_prof" in st.session_state:
     tipo, texto = st.session_state.pop("msg_prof")
     getattr(st, tipo)(texto)
 
 # =====================================================================
-# ➕ CADASTRO (só nome)
+# Validação do Nº PM
+# =====================================================================
+def validar_numero_pm(num):
+    """Aceita 123456-7, 1234567 ou 123.456-7 (com pontos opcionais)."""
+    if not num:
+        return None
+    limpo = re.sub(r"[^\d-]", "", num)
+    padrao = re.match(r"^\d{6}-?\d$", limpo)
+    if not padrao:
+        return None
+    return limpo
+
+# =====================================================================
+# ➕ CADASTRO
 # =====================================================================
 with st.form("novo_prof", clear_on_submit=True):
-    c1, c2 = st.columns([5, 1])
-    nome = c1.text_input("Nome do professor(a)")
-    submit = c2.form_submit_button("➕ Adicionar", type="primary")
+    c1, c2 = st.columns([3, 1])
+    nome = c1.text_input("Nome completo do professor(a)")
+    numero_pm = c2.text_input("Nº PM", placeholder="000000-0")
+
+    submit = st.form_submit_button("➕ Adicionar", type="primary")
 
 if submit:
-    if not nome.strip():
-        st.session_state["msg_prof"] = ("error", "Informe o nome.")
+    nome_limpo = nome.strip()
+    num_pm = validar_numero_pm(numero_pm.strip()) if numero_pm.strip() else None
+
+    if not nome_limpo:
+        st.session_state["msg_prof"] = ("error", "Informe o nome completo.")
+    elif numero_pm.strip() and num_pm is None:
+        st.session_state["msg_prof"] = (
+            "error",
+            "Nº PM inválido. Use o formato **000000-0** (6 dígitos + hífen + 1 dígito)."
+        )
     else:
         try:
             with engine.begin() as conn:
                 conn.execute(text(
-                    "INSERT INTO professores (nome, carga_max) VALUES (:n, 0)"
-                ), {"n": nome.strip()})
+                    "INSERT INTO professores (nome, numero_pm, carga_max) "
+                    "VALUES (:n, :pm, 0)"
+                ), {"n": nome_limpo, "pm": num_pm})
+            msg_extra = f" (Nº PM {num_pm})" if num_pm else ""
             st.session_state["msg_prof"] = (
-                "success", f"✅ {nome.strip()} cadastrado(a)!"
+                "success", f"✅ {nome_limpo}{msg_extra} cadastrado(a)!"
             )
         except Exception as e:
-            if "unique" in str(e).lower():
+            erro = str(e).lower()
+            if "idx_professores_numero_pm" in erro or "numero_pm" in erro:
                 st.session_state["msg_prof"] = (
-                    "warning", f"⚠️ Já existe '{nome}'."
+                    "warning",
+                    f"⚠️ Já existe um professor com o Nº PM {num_pm}."
+                )
+            elif "unique" in erro:
+                st.session_state["msg_prof"] = (
+                    "warning", f"⚠️ Já existe um professor com o nome '{nome_limpo}'."
                 )
             else:
                 st.session_state["msg_prof"] = ("error", f"Erro: {e}")
-        st.rerun()
+    st.rerun()
 
 # =====================================================================
 # 📋 LISTA
@@ -58,6 +93,7 @@ with engine.connect() as conn:
         SELECT
             p.id,
             p.nome,
+            p.numero_pm,
             COALESCE(
                 (SELECT SUM(a.aulas_semana) FROM atividades a
                  WHERE a.professor_id = p.id AND a.ano_letivo_id = :ano),
@@ -80,6 +116,7 @@ with engine.connect() as conn:
     """), conn, params={"ano": ano_id})
 
 df["total_anual"] = df["total_semanal"] * 40
+df["numero_pm"] = df["numero_pm"].fillna("—")
 
 st.subheader(f"Cadastrados ({len(df)})")
 
@@ -93,9 +130,9 @@ if df.empty:
 col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
 
 with col_f1:
-    busca = st.text_input("🔍 Buscar por nome", placeholder="Digite parte do nome...")
+    busca = st.text_input("🔍 Buscar por nome ou Nº PM",
+                          placeholder="Ex: João ou 123456-7")
 
-# Extrai disciplinas únicas para filtro
 todas_disc = set()
 for d in df["disciplinas"].dropna():
     if d and d != "—":
@@ -110,10 +147,12 @@ with col_f3:
     st.write("")
     st.write("")
 
-# Aplica filtros
 df_filt = df.copy()
 if busca:
-    df_filt = df_filt[df_filt["nome"].str.contains(busca, case=False, na=False)]
+    df_filt = df_filt[
+        df_filt["nome"].str.contains(busca, case=False, na=False) |
+        df_filt["numero_pm"].str.contains(busca, case=False, na=False)
+    ]
 if filtro_disc != "(todas)":
     df_filt = df_filt[df_filt["disciplinas"].str.contains(filtro_disc, na=False)]
 
@@ -121,11 +160,12 @@ if filtro_disc != "(todas)":
 # 📊 TABELA
 # =====================================================================
 df_view = df_filt[[
-    "id", "nome", "total_semanal", "total_anual",
+    "id", "nome", "numero_pm", "total_semanal", "total_anual",
     "num_turmas", "disciplinas"
 ]].rename(columns={
     "id": "ID",
-    "nome": "Nome",
+    "nome": "Nome completo",
+    "numero_pm": "Nº PM",
     "total_semanal": "Aulas/sem",
     "total_anual": "Aulas/ano",
     "num_turmas": "Turmas",
@@ -137,11 +177,14 @@ df_view.insert(0, "🗑️", False)
 editado = st.data_editor(
     df_view,
     column_config={
-        "🗑️": st.column_config.CheckboxColumn(
-            "🗑️", default=False, width="small"
-        ),
+        "🗑️": st.column_config.CheckboxColumn("🗑️", default=False, width="small"),
         "ID": st.column_config.NumberColumn("ID", disabled=True, width="small"),
-        "Nome": st.column_config.TextColumn("Nome", disabled=True, width="large"),
+        "Nome completo": st.column_config.TextColumn(
+            "Nome completo", disabled=True, width="large"
+        ),
+        "Nº PM": st.column_config.TextColumn(
+            "Nº PM", disabled=True, width="small"
+        ),
         "Aulas/sem": st.column_config.NumberColumn(
             "Aulas/sem", disabled=True, width="small"
         ),
@@ -160,7 +203,6 @@ editado = st.data_editor(
     key="editor_profs",
 )
 
-# Rodapé com totais
 total_sem = int(df_filt["total_semanal"].sum())
 st.caption(
     f"📊 **Exibindo {len(df_filt)} de {len(df)} professores** · "
@@ -172,9 +214,11 @@ st.caption(
 # =====================================================================
 col_exp1, col_exp2, _ = st.columns([1, 1, 3])
 csv = df_filt[[
-    "nome", "total_semanal", "total_anual", "num_turmas", "disciplinas"
+    "nome", "numero_pm", "total_semanal", "total_anual",
+    "num_turmas", "disciplinas"
 ]].rename(columns={
-    "nome": "Professor",
+    "nome": "Nome completo",
+    "numero_pm": "Nº PM",
     "total_semanal": "Aulas semanais",
     "total_anual": "Aulas anuais",
     "num_turmas": "Turmas",
@@ -198,25 +242,24 @@ st.subheader("👁️ Detalhes do Professor")
 if df.empty:
     st.info("Nenhum professor cadastrado ainda.")
 else:
+    opcoes = df["id"].tolist()
     prof_sel = st.selectbox(
         "Escolha um professor para ver os detalhes",
-        df["nome"].tolist(),
+        opcoes,
+        format_func=lambda x: (
+            f"{df.loc[df['id'] == x, 'nome'].iloc[0]} "
+            f"({df.loc[df['id'] == x, 'numero_pm'].iloc[0]})"
+        ),
         key="detalhe_prof",
     )
-    prof_id = int(df.loc[df["nome"] == prof_sel, "id"].iloc[0])
-    prof_dados = df.loc[df["id"] == prof_id].iloc[0]
+    prof_dados = df.loc[df["id"] == prof_sel].iloc[0]
 
-    # Cards resumo
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Aulas/semana", int(prof_dados["total_semanal"]))
-    c2.metric("Aulas/ano", int(prof_dados["total_anual"]))
-    c3.metric("Turmas", int(prof_dados["num_turmas"]))
-    c4.metric(
-        "Disciplinas",
-        len([d for d in str(prof_dados["disciplinas"]).split(",") if d.strip() and d.strip() != "—"])
-    )
+    c1.metric("Nº PM", prof_dados["numero_pm"])
+    c2.metric("Aulas/semana", int(prof_dados["total_semanal"]))
+    c3.metric("Aulas/ano", int(prof_dados["total_anual"]))
+    c4.metric("Turmas", int(prof_dados["num_turmas"]))
 
-    # Tabela de atribuições detalhadas
     with engine.connect() as conn:
         detalhes = pd.read_sql(text("""
             SELECT
@@ -231,12 +274,12 @@ else:
             JOIN componentes c ON c.id = a.componente_id
             WHERE a.professor_id = :p AND a.ano_letivo_id = :ano
             ORDER BY t.codigo, c.nome
-        """), conn, params={"p": prof_id, "ano": ano_id})
+        """), conn, params={"p": int(prof_sel), "ano": ano_id})
 
     if detalhes.empty:
-        st.info(f"ℹ️ **{prof_sel}** ainda não tem aulas atribuídas.")
+        st.info(f"ℹ️ **{prof_dados['nome']}** ainda não tem aulas atribuídas.")
     else:
-        st.markdown(f"**Aulas atribuídas a {prof_sel}:**")
+        st.markdown(f"**Aulas atribuídas a {prof_dados['nome']}:**")
         st.dataframe(detalhes, use_container_width=True, hide_index=True)
 
 # =====================================================================
