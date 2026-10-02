@@ -105,6 +105,9 @@ paginas = {
         st.Page("pages/gerenciar_anos.py", title="5.1 🗓️ Gerenciar Anos", icon="🗓️"),
         st.Page("pages/configuracoes.py", title="5.2 ⚙️ Configurações", icon="⚙️"),
     ],
+    "6. 📚 TUTORIAIS": [
+        st.Page("pages/tutoriais.py", title="6.1 📖 Manual do Usuário", icon="📚"),
+    ],
 }
 
 # =====================================================================
